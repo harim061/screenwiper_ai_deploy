@@ -1,5 +1,4 @@
 from flask import Flask, render_template, request, jsonify
-import cv2
 from paddleocr import PaddleOCR
 import numpy as np
 from PIL import Image
@@ -16,11 +15,29 @@ ocr = PaddleOCR( lang='korean')
 
 def perform_ocr(image):
     """이미지에서 OCR 수행"""
-    # OpenCV 이미지를 PIL 이미지로 변환
-    image_pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+
+    image_np = np.array(image)
     # OCR 수행
-    result = ocr.ocr(np.array(image_pil), cls=True)
+    result = ocr.ocr(image_np, cls=True)
     return result
+
+def download_image_from_url(image_url):
+    try:
+        # 이미지 다운로드
+        response = requests.get(image_url)
+        response.raise_for_status()  # 오류 확인
+
+        # 이미지 바이트로 변환
+        img = Image.open(BytesIO(response.content))
+
+        # 이미지를 RGB로 변환 (OCR 처리를 위해 필요할 수 있음)
+        img = img.convert('RGB')
+
+        return img
+
+    except requests.exceptions.RequestException as e:
+        print(f"이미지 다운로드 중 오류가 발생했습니다: {e}")
+        return None
 
 # &줄바꿈 함수
 def format_ocr_result(ocr_results):
@@ -226,20 +243,7 @@ def generate_category_3_response(image_file, text_results):
 
 @app.route('/analyze_image', methods=['POST'])
 def analyze_image():
-    # 이미지 파일 받기
-    if 'image' not in request.files:
-        return jsonify({'error': '이미지 파일이 제공되지 않았습니다.'}), 400
     
-    image_file = request.files['image']
-    
-    # 이미지 읽기
-    image_bytes = image_file.read()
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-
-    # ? api 연결 후 url로 변경 + return에 추가
-    """
     # URL 파라미터 받기
     image_url = request.form.get('imageUrl')
     if not image_url:
@@ -247,8 +251,11 @@ def analyze_image():
     
     # 이미지 다운로드
     img = download_image_from_url(image_url)
-    """
-
+    if img is None:
+        return jsonify({'error': '이미지 다운로드에 실패했습니다.'}), 400
+    # 이미지 다운로드
+    img = download_image_from_url(image_url)
+    
     # OCR 수행
     ocr_results = perform_ocr(img)
     
@@ -283,8 +290,6 @@ def analyze_image():
         if address_extracted:
             continue
         
-    
-    print(f'printttt{extracted_events}')
 
     # &카테고리 결정 
     if extracted_places:
