@@ -6,6 +6,7 @@ from PIL import Image
 import re
 from datetime import datetime
 import random
+import git
 
 
 app = Flask(__name__)
@@ -311,6 +312,17 @@ def analyze_image():
 def index():
     return render_template('index.html')
 
+
+@app.route("/update_server",methods=["POST"])
+def webhook():
+    if request.method =="POST":
+        repo  = git.Repo("깃허브 레포 주소")
+        origin = repo.remotes.origin
+        origin.pull()
+
+        return "Pythonanywhere 서버에 성공적으로 업로드되었습니다", 200
+    else:
+        return "유효하지 않은 이벤트 타입입니다.", 400 
 
 if __name__ == '__main__':
     app.run(debug=True)
