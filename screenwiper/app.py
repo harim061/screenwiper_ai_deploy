@@ -191,7 +191,6 @@ def generate_category_1_response(image_file, text_results, extracted_places,hash
     summary = extract_summary(hashtags)
 
     return {
-        "photoId": image_file.filename,
         "categoryId": 1,
         "title": "아직",  # !아직
         "address": " ".join(extracted_places), 
@@ -205,7 +204,6 @@ def generate_category_1_response(image_file, text_results, extracted_places,hash
 def generate_category_2_response(image_file,extracted_events):
     
     return {
-        "photoId": image_file.filename,
         "categoryId": 2, 
         "title": "아쥑", # !아직
         "list": extracted_events, 
@@ -217,7 +215,6 @@ def generate_category_2_response(image_file,extracted_events):
 def generate_category_3_response(image_file, text_results):
     """카테고리 3에 대한 JSON 응답 생성"""
     return {
-        "photoId": image_file.filename,
         "categoryId": 3,
         "title": "아쥑", # !아직
         "summary": " ".join(text_results),  # !카테고리 3에 요약이 필요할 경우 처리 필요  
@@ -316,7 +313,7 @@ def index():
 @app.route("/update_server",methods=["POST"])
 def webhook():
     if request.method =="POST":
-        repo  = git.Repo("깃허브 레포 주소")
+        repo  = git.Repo("깃허브 레포  주소")
         origin = repo.remotes.origin
         origin.pull()
 
