@@ -253,8 +253,7 @@ def analyze_image():
     img = download_image_from_url(image_url)
     if img is None:
         return jsonify({'error': '이미지 다운로드에 실패했습니다.'}), 400
-    # 이미지 다운로드
-    img = download_image_from_url(image_url)
+    
     
     # OCR 수행
     ocr_results = perform_ocr(img)
