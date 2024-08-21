@@ -3,14 +3,14 @@ import requests
 # 서버 URL
 url = 'http://localhost:5000/analyze_image'
 
-# 테스트 이미지 파일 경로
-# file_path = './test_img/test3.png'
-file_path = './test_img/date-test2.png'
+# # 테스트 이미지 파일 경로
+# # file_path = './test_img/test3.png'
+# file_path = './test_img/date-test2.png'
 
-# 이미지 파일 열기 및 요청 보내기
-with open(file_path, 'rb') as image_file:
-    files = {'image': image_file}
-    response = requests.post(url, files=files)
+# # 이미지 파일 열기 및 요청 보내기
+# with open(file_path, 'rb') as image_file:
+#     files = {'image': image_file}
+#     response = requests.post(url, files=files)
 
 # ?api 연결 후 url로 변경  
 """

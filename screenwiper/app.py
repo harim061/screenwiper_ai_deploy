@@ -5,6 +5,8 @@ from PIL import Image
 import re
 from datetime import datetime
 import random
+import requests
+from io import BytesIO
 
 app = Flask(__name__)
 
@@ -200,7 +202,7 @@ def extract_operating_hours(text):
 
 
 # &카테고리 1에 대한 JSON 응답 생성
-def generate_category_1_response(image_file, text_results, extracted_places,hashtags):
+def generate_category_1_response(image,image_url, text_results, extracted_places,hashtags):
 
     operating_hours = extract_operating_hours(text_results)
     summary = extract_summary(hashtags)
@@ -211,30 +213,30 @@ def generate_category_1_response(image_file, text_results, extracted_places,hash
         "address": " ".join(extracted_places), 
         "operatingHours": operating_hours, 
         "summary": summary, 
-        "photoName": image_file.filename,
-        "photoUrl": ""  # ?URL이 제공된 경우 추가
+        "photoName": image.filename,
+        "photoUrl": image_url 
     }
 
 # &카테고리 2에 대한 JSON 응답 생성
-def generate_category_2_response(image_file,extracted_events):
+def generate_category_2_response(image,image_url,extracted_events):
     
     return {
         "categoryId": 2, 
         "title": "아쥑", # !아직
         "list": extracted_events, 
-        "photoName": image_file.filename,
-        "photoUrl": ""  # ?URL이 제공된 경우 추가
+        "photoName": image.filename,
+        "photoUrl": image_url
     }
 
 # &카테고리 3에 대한 JSON 응답 생성
-def generate_category_3_response(image_file, text_results):
+def generate_category_3_response(image,image_url, text_results):
     """카테고리 3에 대한 JSON 응답 생성"""
     return {
         "categoryId": 3,
         "title": "아쥑", # !아직
         "summary": " ".join(text_results),  # !카테고리 3에 요약이 필요할 경우 처리 필요  
-        "photoName": image_file.filename,
-        "photoUrl": ""  # ?URL이 제공된 경우 추가
+        "photoName": image.filename,
+        "photoUrl":image_url
     }
 
 
@@ -298,11 +300,11 @@ def analyze_image():
     
     # &return 
     if category_id == 1:
-        response_data = generate_category_1_response(image_file, formatted_text, extracted_places,hashtags)
+        response_data = generate_category_1_response(img,image_url, formatted_text, extracted_places,hashtags)
     elif category_id == 2:
-        response_data = generate_category_2_response(image_file,extracted_events)
+        response_data = generate_category_2_response(img,image_url,extracted_events)
     else:
-        response_data = generate_category_3_response(image_file, formatted_text)
+        response_data = generate_category_3_response(img,image_url, formatted_text)
     
     return jsonify(response_data)
 
