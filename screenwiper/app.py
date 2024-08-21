@@ -5,8 +5,6 @@ from PIL import Image
 import re
 from datetime import datetime
 import random
-import git
-
 
 app = Flask(__name__)
 
