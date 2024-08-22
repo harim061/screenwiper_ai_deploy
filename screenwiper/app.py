@@ -265,17 +265,21 @@ def analyze_image():
     if img is None:
         return jsonify({'error': '이미지 다운로드에 실패했습니다.'}), 400
     
-    
+    print("ocr")
     # OCR 수행
     ocr_results = perform_ocr(img)
     
+    print("ocr formatted")
     # OCR 결과 텍스트 추출 및 줄바꿈 포맷 적용
     formatted_text = format_ocr_result(ocr_results)
 
+    print("hastag")
     # 해시태그
     formatted_text,hashtags = remove_summary(formatted_text)
 
+
     sentences = formatted_text.split('\n')
+
 
     # &날짜 추출 및 정보 저장
     # &장소 정보 추출
@@ -284,23 +288,26 @@ def analyze_image():
 
 
     for sentence in sentences:
-        
+        print("date")
         # &카테고리2 events
         extracted_events.extend(extract_dates_and_events(sentence))
         
-
+        print("add")
         # &카테고리1 address 
         address_extracted = False    
         places = extract_places(sentence)
 
+        print("find place")
         if places:
             extracted_places.extend(places)
             address_extracted = True
         
+        print("find add")
         if address_extracted:
             continue
         
 
+    print("category")
     # &카테고리 결정 
     if extracted_places:
         category_id = 1
@@ -309,6 +316,7 @@ def analyze_image():
     else:
         category_id = 3
     
+    print("return")
     # &return 
     if category_id == 1:
         response_data = generate_category_1_response(img,image_url, formatted_text, extracted_places,hashtags)
