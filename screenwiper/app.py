@@ -6,6 +6,7 @@ import re
 from datetime import datetime
 import random
 import requests
+import os
 from io import BytesIO
 
 app = Flask(__name__)
@@ -37,6 +38,7 @@ def download_image_from_url(image_url):
     except (ValueError, IOError) as e:
         print(f"이미지 처리 중 오류가 발생했습니다: {e}")
         return None
+
 
 
 # &줄바꿈 함수
@@ -209,6 +211,7 @@ def generate_category_1_response(image,image_url, text_results, extracted_places
 
     operating_hours = extract_operating_hours(text_results)
     summary = extract_summary(hashtags)
+    filename = os.path.basename(image_url)
 
     return {
         "categoryId": 1,
@@ -216,29 +219,33 @@ def generate_category_1_response(image,image_url, text_results, extracted_places
         "address": " ".join(extracted_places), 
         "operatingHours": operating_hours, 
         "summary": summary, 
-        "photoName": image.filename,
+        "photoName": filename,
         "photoUrl": image_url 
     }
 
 # &카테고리 2에 대한 JSON 응답 생성
 def generate_category_2_response(image,image_url,extracted_events):
-    
+    filename = os.path.basename(image_url)
+
     return {
         "categoryId": 2, 
         "title": "아쥑", # !아직
         "list": extracted_events, 
-        "photoName": image.filename,
+        "photoName": filename,
         "photoUrl": image_url
     }
 
 # &카테고리 3에 대한 JSON 응답 생성
 def generate_category_3_response(image,image_url, text_results):
+
+    filename = os.path.basename(image_url)
+
     """카테고리 3에 대한 JSON 응답 생성"""
     return {
         "categoryId": 3,
         "title": "아쥑", # !아직
         "summary": " ".join(text_results),  # !카테고리 3에 요약이 필요할 경우 처리 필요  
-        "photoName": image.filename,
+        "photoName": filename,
         "photoUrl":image_url
     }
 
