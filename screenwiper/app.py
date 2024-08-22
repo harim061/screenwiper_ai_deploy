@@ -157,16 +157,19 @@ def remove_summary(text):
 
 # &카테고리 1 (랜덤 해시태그 설정)
 def extract_summary(hashtags):
+    if not hashtags:  
+        return "해쉬태그 없더"
     summary = random.choice(hashtags).strip()
     return summary
 
+
 # &카테고리1 (시간)
 def extract_operating_hours(text):
-    # 영업 시간 정규식 패턴
+    # Updated 영업 시간 정규식 패턴
     OPERATING_HOURS_PATTERN = (
-        r'(?:오전|오후|매일|매일|월요일|화요일|수요일|목요일|금요일|토요일|일요일|월|화|수|목|금|토|일|평일|주말)?\s*(\d{1,2}):(\d{2})\s*(?:~|-\s*)\s*(?:오전|오후|매일|월요일|화요일|수요일|목요일|금요일|토요일|일요일|월|화|수|목|금|토|일|평일|주말)?\s*(\d{1,2}):(\d{2})|'  # 오전/오후 형식
-        r'(\d{1,2}):(\d{2})\s*(?:~|-\s*)\s*(\d{1,2}):(\d{2})|'  # 24시간 형식
-        r'(매일|월요일|화요일|수요일|목요일|금요일|토요일|일요일)\s*(\d{1,2}):(\d{2})\s*(?:~|-\s*)\s*(\d{1,2}):(\d{2})'
+        r'(?:매일|월요일|화요일|수요일|목요일|금요일|토요일|일요일)?\s*(\d{1,2}):(\d{2})\s*(?:[-~]?\s*)\s*(\d{1,2}):(\d{2})|'  # 24시간 형식
+        r'(?:오전|오후)?\s*(\d{1,2}):(\d{2})\s*(?:[-~]?\s*)(?:오전|오후)?\s*(\d{1,2}):(\d{2})|'  # 오전/오후 형식
+        r'(매일|월요일|화요일|수요일|목요일|금요일|토요일|일요일)\s*(\d{1,2}):(\d{2})\s*(?:[-~]?\s*)\s*(\d{1,2}):(\d{2})'
     )
     
     matches = re.findall(OPERATING_HOURS_PATTERN, text)
@@ -182,7 +185,7 @@ def extract_operating_hours(text):
             end_time = f"{match[2]}:{match[3]}"
             operating_hours.append(f"{start_time} - {end_time}")
         
-        elif len(match) == 8:
+        elif len(match) == 6:
             # 오전/오후 형식
             start_period = match[0] if match[0] else ""
             end_period = match[4] if match[4] else ""
@@ -190,7 +193,7 @@ def extract_operating_hours(text):
             end_time = f"{end_period} {match[3]}:{match[4]}" if end_period else f"{match[3]}:{match[4]}"
             operating_hours.append(f"{start_time} - {end_time}")
         
-        elif len(match) == 10:
+        elif len(match) == 8:
             # 요일 형식
             day = match[0]
             start_time = f"{match[1]}:{match[2]}"
