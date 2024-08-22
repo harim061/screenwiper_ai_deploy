@@ -14,38 +14,30 @@ app = Flask(__name__)
 ocr = PaddleOCR( lang='korean') 
 
 def perform_ocr(image):
-    """이미지에서 OCR 수행"""
-
     image_np = np.array(image)
-    # OCR 수행
     result = ocr.ocr(image_np, cls=True)
+    print("OCR Result:", result)  # 결과 출력
     return result
+
 
 def download_image_from_url(image_url):
     try:
-        # 이미지 다운로드
         response = requests.get(image_url)
-        response.raise_for_status()  # 다운로드 시 HTTP 오류 발생 시 예외 발생
-        
-        # Content-Type 헤더로 이미지 파일인지 확인
+        response.raise_for_status()
         content_type = response.headers.get('Content-Type')
         if not content_type or not content_type.startswith('image/'):
             raise ValueError("URL이 이미지 파일이 아닙니다.")
-
-        # 이미지 바이트로 변환
         img = Image.open(BytesIO(response.content))
-
-        # 이미지를 RGB로 변환 (OCR 처리를 위해 필요할 수 있음)
         img = img.convert('RGB')
-
+        img.save('downloaded_image.jpg')  # 이미지 파일 저장하여 확인
         return img
-
     except requests.exceptions.RequestException as e:
         print(f"이미지 다운로드 중 오류가 발생했습니다: {e}")
         return None
     except (ValueError, IOError) as e:
         print(f"이미지 처리 중 오류가 발생했습니다: {e}")
         return None
+
 
 # &줄바꿈 함수
 def format_ocr_result(ocr_results):
