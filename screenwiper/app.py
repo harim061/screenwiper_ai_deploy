@@ -25,7 +25,12 @@ def download_image_from_url(image_url):
     try:
         # 이미지 다운로드
         response = requests.get(image_url)
-        response.raise_for_status()  # 오류 확인
+        response.raise_for_status()  # 다운로드 시 HTTP 오류 발생 시 예외 발생
+        
+        # Content-Type 헤더로 이미지 파일인지 확인
+        content_type = response.headers.get('Content-Type')
+        if not content_type or not content_type.startswith('image/'):
+            raise ValueError("URL이 이미지 파일이 아닙니다.")
 
         # 이미지 바이트로 변환
         img = Image.open(BytesIO(response.content))
@@ -37,6 +42,9 @@ def download_image_from_url(image_url):
 
     except requests.exceptions.RequestException as e:
         print(f"이미지 다운로드 중 오류가 발생했습니다: {e}")
+        return None
+    except (ValueError, IOError) as e:
+        print(f"이미지 처리 중 오류가 발생했습니다: {e}")
         return None
 
 # &줄바꿈 함수
