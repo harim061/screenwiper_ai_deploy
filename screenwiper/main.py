@@ -348,4 +348,4 @@ async def index():
 if __name__ == "__main__":
     import uvicorn
     # 8080
-    uvicorn.run(app, host="0.0.0.0", port=5000, log_level="debug")
+    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="debug")
