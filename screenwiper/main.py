@@ -10,6 +10,8 @@ import random
 import aiohttp
 import os
 from io import BytesIO
+import asyncio
+
 
 app = FastAPI()
 
@@ -103,42 +105,69 @@ def extract_places(text):
     
     return []
 
+
+def parse_date(date_str):
+    formats = [
+        '%Y-%m-%d', '%d/%m/%Y', '%d.%m.%Y', '%y-%m-%d', '%Y년 %m월 %d일',
+        '%Y%m%d'  # YYYYMMDD 형식 추가
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(date_str, fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    return None
+
 def extract_dates_and_events(text):
     date_patterns = [
-        r'\b(\d{4}-\d{2}-\d{2})\b',         
-        r'\b(\d{2}/\d{2}/\d{4})\b',         
-        r'\b(\d{2}\.\d{2}\.\d{4})\b',       
-        r'\b(\d{2}-\d{2}-\d{2})\b',         
-        r'\b(\d{4}년 \d{1,2}월 \d{1,2}일)\b'  
+        # r'\b(\d{4}-\d{2}-\d{2})\b',  # YYYY-MM-DD
+        # r'\b(\d{2}/\d{2}/\d{4})\b',  # MM/DD/YYYY or DD/MM/YYYY
+        # r'\b(\d{2}\.\d{2}\.\d{4})\b',  # DD.MM.YYYY
+        # r'\b(\d{2}-\d{2}-\d{2})\b',  # DD-MM-YY or YY-MM-DD
+        # r'\b(\d{4}년 \d{1,2}월 \d{1,2}일)\b',  # YYYY년 MM월 DD일
+        # r'\b(\d{8})\b',  # YYYYMMDD
+        r'\b(\d{4}-\d{2}-\d{2})\s*[-~]?\s*(\d{4}-\d{2}-\d{2})\b',  # YYYY-MM-DD - YYYY-MM-DD
+        r'\b(\d{8})\s*[-~]?\s*(\d{8})\b',  # YYYYMMDD - YYYYMMDD
+        r'\b(\d{4}년 \d{1,2}월 \d{1,2}일)\s*[-~]?\s*(\d{4}년 \d{1,2}월 \d{1,2}일)\b'  # YYYY년 MM월 DD일 - YYYY년 MM월 DD일
     ]
     
-    dates_and_events = []
-
-    for pattern in date_patterns:
-        matches = re.findall(pattern, text)
-        for match in matches:
-            try:
-                if re.match(r'\d{4}-\d{2}-\d{2}', match):
-                    date_obj = datetime.strptime(match, '%Y-%m-%d')
-                elif re.match(r'\d{2}/\d{2}/\d{4}', match):
-                    date_obj = datetime.strptime(match, '%m/%d/%Y')
-                elif re.match(r'\d{2}\.\d{2}\.\d{4}', match):
-                    date_obj = datetime.strptime(match, '%d.%m.%Y')
-                elif re.match(r'\d{2}-\d{2}-\d{2}', match):
-                    date_obj = datetime.strptime(match, '%d-%m-%y')
-                elif re.match(r'\d{4}년 \d{1,2}월 \d{1,2}일', match):
-                    date_obj = datetime.strptime(match, '%Y년 %m월 %d일')
-                else:
-                    continue
-                date_str = date_obj.strftime('%Y-%m-%d')
-                event_name = text.replace(date_str, '').strip()
-                if event_name:
-                    dates_and_events.append({"name": event_name, "date": date_str})
-            
-            except ValueError:
-                pass
+    events = []
+    lines = text.split('\n')
     
-    return dates_and_events
+    for i in range(len(lines)):
+        line = lines[i]
+        for pattern in date_patterns:
+            matches = re.findall(pattern, line)
+            if matches:
+                for match in matches:
+                    if isinstance(match, tuple):
+                        start_date = parse_date(match[0])
+                        end_date = parse_date(match[1])
+                    else:
+                        start_date = parse_date(match)
+                        end_date = start_date
+
+                    if start_date:
+                        event_name = ""
+                        
+                        
+                        # 이전 줄에서 이벤트 이름 찾기
+                        if i > 0:
+                            event_name = lines[i-1].strip()
+                        
+                        # 현재 줄에서 날짜를 제외한 부분을 이벤트 이름에 추가
+                        current_line_without_date = re.sub(pattern, '', line).strip()
+                        if current_line_without_date:
+                            event_name += " " + current_line_without_date if event_name else current_line_without_date
+                        
+                        date_range = f"{start_date} - {end_date}"
+                        
+                        events.append({
+                            "name": event_name.strip(),
+                            "date": date_range
+                        })
+    
+    return events
 
 def extract_operating_hours(text):
     OPERATING_HOURS_PATTERN = (
@@ -173,25 +202,52 @@ def extract_operating_hours(text):
     
     return operating_hours
 
-def generate_category_1_response(image, image_url, text_results, extracted_places, hashtags):
-    operating_hours = extract_operating_hours(text_results)
-    summary = extract_summary(hashtags)
+
+def analyze_sentence_for_category(sentence):
+    # 날짜 및 일정 먼저 추출 시도
+    extracted_events = extract_dates_and_events(sentence)
+    
+    if extracted_events:
+        return 2, extracted_events  # 일정인 경우 카테고리 2로 분류
+    
+    # 영업시간 추출 시도
+    operating_hours = extract_operating_hours(sentence)
+    
+    if operating_hours:
+        return 1, operating_hours  # 영업시간인 경우 카테고리 1로 분류
+    
+    # 장소 정보 추출 시도
+    extracted_places = extract_places(sentence)
+    
+    if extracted_places:
+        return 1, extracted_places  # 장소인 경우 카테고리 1로 분류
+    
+    return 3, None  # 그 외는 카테고리 3으로 분류
+
+def generate_category_1_response(image, image_url, formatted_text, extracted_places, hashtags):
+    operating_hours = extract_operating_hours(formatted_text)
+    summary = extract_summary(hashtags) if hashtags else ""
     filename = os.path.basename(image_url)
+    
+    # extracted_places를 문자열로 변환
+    # places_str = " ".join([str(place) for place in extracted_places])
+    
     return {
         "categoryId": 1,
-        "title": "아직",
-        "address": " ".join(extracted_places),
+        "title": "카카오지도 연결",
+        "address": extracted_places[0],
         "operatingHours": operating_hours,
         "summary": summary,
         "photoName": filename,
         "photoUrl": image_url
     }
 
+
 def generate_category_2_response(image, image_url, extracted_events):
     filename = os.path.basename(image_url)
     return {
         "categoryId": 2,
-        "title": "아쥑",
+        "title": "일정",
         "list": extracted_events,
         "photoName": filename,
         "photoUrl": image_url
@@ -207,6 +263,7 @@ def generate_category_3_response(image, image_url, text_results):
         "photoUrl": image_url
     }
 
+
 @app.post("/analyze_image")
 async def analyze_image(image_url: ImageUrl):
     image_url = image_url.imageUrl
@@ -216,44 +273,37 @@ async def analyze_image(image_url: ImageUrl):
     
     img = await download_image_from_url(image_url)
     
-    # OCR 수행
-    ocr_results = await perform_ocr(img)
+    try:
+        # OCR 수행 - 시간 제한 15초
+        ocr_results = await asyncio.wait_for(perform_ocr(img), timeout=15.0)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=408, detail="분석 실패: 시간이 초과되었습니다.")
+    
     
     # OCR 결과 텍스트 추출 및 줄바꿈 포맷 적용
     formatted_text = format_ocr_result(ocr_results)
 
+
     # 해시태그
     formatted_text, hashtags = remove_summary(formatted_text)
+    print(formatted_text)
 
-    sentences = formatted_text.split('\n')
-
-    extracted_places = []
-    extracted_events = []
-
-    for sentence in sentences:
-        extracted_events.extend(extract_dates_and_events(sentence))
-        address_extracted = False    
-        places = extract_places(sentence)
-        if places:
-            extracted_places.extend(places)
-            address_extracted = True
-        if address_extracted:
-            continue
-
-    if extracted_places:
-        category_id = 1
-    elif extracted_events:
-        category_id = 2
-    else:
-        category_id = 3
+    extracted_events = extract_dates_and_events(formatted_text)
     
-    if category_id == 1:
-        response_data = generate_category_1_response(img, image_url, formatted_text, extracted_places, hashtags)
-    elif category_id == 2:
+    if extracted_events:
+        print("Extracted events:", extracted_events)
         response_data = generate_category_2_response(img, image_url, extracted_events)
     else:
-        response_data = generate_category_3_response(img, image_url, formatted_text)
+        extracted_places = extract_places(formatted_text)
+        if extracted_places:
+            print("Extracted places:", extracted_places)
+            response_data = generate_category_1_response(img, image_url, formatted_text, extracted_places, hashtags)
+        else:
+            print("No events or places found. Categorizing as 3.")
+            summarized_text = formatted_text
+            response_data = generate_category_3_response(img, image_url, summarized_text)
     
+    print("Response category:", response_data["categoryId"])
     return JSONResponse(content=response_data)
 
 @app.get("/")
@@ -262,4 +312,5 @@ async def index():
 
 if __name__ == "__main__":
     import uvicorn
+    # 8080
     uvicorn.run(app, host="0.0.0.0", port=5000, log_level="debug")
