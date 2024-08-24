@@ -11,7 +11,7 @@ import aiohttp
 import os
 from io import BytesIO
 import asyncio
-
+from krwordrank.word import KRWordRank
 
 app = FastAPI()
 
@@ -224,7 +224,17 @@ def analyze_sentence_for_category(sentence):
     
     return 3, None  # 그 외는 카테고리 3으로 분류
 
-def generate_category_1_response(image, image_url, formatted_text, extracted_places, hashtags):
+# 텍스트에서 숫자 제거
+def remove_numbers(text):
+    return re.sub(r'\d+', '', text)
+
+def extract_keywords(texts, min_count=1, max_length=20, beta=0.95, max_iter=10):
+    wordrank_extractor = KRWordRank(min_count=min_count, max_length=max_length)
+    keywords, rank, graph = wordrank_extractor.extract(texts, beta, max_iter)
+    
+    return keywords if keywords is not None else {}
+
+def generate_category_1_response( image_url, formatted_text, extracted_places, hashtags):
     operating_hours = extract_operating_hours(formatted_text)
     summary = extract_summary(hashtags) if hashtags else ""
     filename = os.path.basename(image_url)
@@ -243,17 +253,26 @@ def generate_category_1_response(image, image_url, formatted_text, extracted_pla
     }
 
 
-def generate_category_2_response(image, image_url, extracted_events):
+def generate_category_2_response( image_url, formatted_text,extracted_events):
     filename = os.path.basename(image_url)
+
+    # 키워드 추출
+    clean_text = remove_numbers(formatted_text)
+    texts = clean_text.split('\n')
+
+    keywords = extract_keywords(texts)
+    top_keywords = [word for word, r in sorted(keywords.items(), key=lambda x: x[1], reverse=True)[:3]]
+    keywords_summary = ' '.join(top_keywords)
+
     return {
         "categoryId": 2,
-        "title": "일정",
+        "title": keywords_summary,
         "list": extracted_events,
         "photoName": filename,
         "photoUrl": image_url
     }
 
-def generate_category_3_response(image, image_url, text_results):
+def generate_category_3_response( image_url, formatted_text):
     filename = os.path.basename(image_url)
     return {
         "categoryId": 3,
@@ -279,7 +298,7 @@ async def analyze_image(image_url: ImageUrl):
     except asyncio.TimeoutError:
         raise HTTPException(status_code=408, detail="분석 실패: 시간이 초과되었습니다.")
     
-    
+
     # OCR 결과 텍스트 추출 및 줄바꿈 포맷 적용
     formatted_text = format_ocr_result(ocr_results)
 
@@ -292,16 +311,16 @@ async def analyze_image(image_url: ImageUrl):
     
     if extracted_events:
         print("Extracted events:", extracted_events)
-        response_data = generate_category_2_response(img, image_url, extracted_events)
+        response_data = generate_category_2_response( image_url, formatted_text,extracted_events)
     else:
         extracted_places = extract_places(formatted_text)
         if extracted_places:
             print("Extracted places:", extracted_places)
-            response_data = generate_category_1_response(img, image_url, formatted_text, extracted_places, hashtags)
+            response_data = generate_category_1_response(image_url, formatted_text, extracted_places, hashtags)
         else:
             print("No events or places found. Categorizing as 3.")
             summarized_text = formatted_text
-            response_data = generate_category_3_response(img, image_url, summarized_text)
+            response_data = generate_category_3_response(image_url,formatted_text)
     
     print("Response category:", response_data["categoryId"])
     return JSONResponse(content=response_data)
