@@ -4,5 +4,7 @@ fastapi==0.112.1
 paddleocr==2.8.1
 pillow==10.4.0
 pydantic==2.8.2
-numpy==1.26.4
+numpy==1.24.4
 uvicorn==0.22.0
+krwordrank==1.0.3
+

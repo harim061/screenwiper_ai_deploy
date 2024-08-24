@@ -12,6 +12,8 @@ import os
 from io import BytesIO
 import asyncio
 from krwordrank.word import KRWordRank
+from krwordrank.sentence import summarize_with_sentences
+
 
 app = FastAPI()
 
@@ -36,7 +38,6 @@ async def download_image_from_url(image_url: str) -> Image.Image:
                     raise ValueError("URL이 이미지 파일이 아닙니다.")
                 img = Image.open(BytesIO(await response.read()))
                 img = img.convert('RGB')
-                img.save('downloaded_image.jpg')  # 이미지 파일 저장하여 확인
                 return img
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"이미지 다운로드 중 오류가 발생했습니다: {e}")
@@ -234,6 +235,13 @@ def extract_keywords(texts, min_count=1, max_length=20, beta=0.95, max_iter=10):
     
     return keywords if keywords is not None else {}
 
+def summarize_text(text, num_keywords=5, num_keysents=10):
+    
+    # 문장 요약
+    keywords, key_sentences = summarize_with_sentences(text, num_keywords=num_keywords, num_keysents=num_keysents)
+    
+    return key_sentences
+
 def generate_category_1_response( image_url, formatted_text, extracted_places, hashtags):
     operating_hours = extract_operating_hours(formatted_text)
     summary = extract_summary(hashtags) if hashtags else ""
@@ -274,10 +282,22 @@ def generate_category_2_response( image_url, formatted_text,extracted_events):
 
 def generate_category_3_response( image_url, formatted_text):
     filename = os.path.basename(image_url)
+
+    # 키워드 추출
+    clean_text = remove_numbers(formatted_text)
+    texts = clean_text.split('\n')
+
+    keywords = extract_keywords(texts)
+    top_keywords = [word for word, r in sorted(keywords.items(), key=lambda x: x[1], reverse=True)[:3]]
+    keywords_summary = ' '.join(top_keywords)
+
+    summarized_sentences = summarize_text(texts)
+        
+
     return {
         "categoryId": 3,
-        "title": "아쥑",
-        "summary": " ".join(text_results),
+        "title": keywords_summary,
+        "summary":summarized_sentences,
         "photoName": filename,
         "photoUrl": image_url
     }
@@ -297,15 +317,12 @@ async def analyze_image(image_url: ImageUrl):
         ocr_results = await asyncio.wait_for(perform_ocr(img), timeout=15.0)
     except asyncio.TimeoutError:
         raise HTTPException(status_code=408, detail="분석 실패: 시간이 초과되었습니다.")
-    
 
     # OCR 결과 텍스트 추출 및 줄바꿈 포맷 적용
     formatted_text = format_ocr_result(ocr_results)
 
-
     # 해시태그
     formatted_text, hashtags = remove_summary(formatted_text)
-    print(formatted_text)
 
     extracted_events = extract_dates_and_events(formatted_text)
     
@@ -319,7 +336,6 @@ async def analyze_image(image_url: ImageUrl):
             response_data = generate_category_1_response(image_url, formatted_text, extracted_places, hashtags)
         else:
             print("No events or places found. Categorizing as 3.")
-            summarized_text = formatted_text
             response_data = generate_category_3_response(image_url,formatted_text)
     
     print("Response category:", response_data["categoryId"])
