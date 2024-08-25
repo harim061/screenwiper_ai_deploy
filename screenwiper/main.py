@@ -14,14 +14,13 @@ import asyncio
 from krwordrank.word import KRWordRank
 from krwordrank.sentence import summarize_with_sentences
 
-
 app = FastAPI()
 
 # PaddleOCR 인스턴스 생성
 ocr = PaddleOCR(lang='korean')
 
-class ImageUrl(BaseModel):
-    imageUrl: str
+class ImageUrls(BaseModel):
+    imageUrls: list[str]
 
 async def perform_ocr(image: Image.Image):
     image_np = np.array(image)
@@ -106,7 +105,6 @@ def extract_places(text):
     
     return []
 
-
 def parse_date(date_str):
     formats = [
         '%Y-%m-%d', '%d/%m/%Y', '%d.%m.%Y', '%y-%m-%d', '%Y년 %m월 %d일',
@@ -121,12 +119,6 @@ def parse_date(date_str):
 
 def extract_dates_and_events(text):
     date_patterns = [
-        # r'\b(\d{4}-\d{2}-\d{2})\b',  # YYYY-MM-DD
-        # r'\b(\d{2}/\d{2}/\d{4})\b',  # MM/DD/YYYY or DD/MM/YYYY
-        # r'\b(\d{2}\.\d{2}\.\d{4})\b',  # DD.MM.YYYY
-        # r'\b(\d{2}-\d{2}-\d{2})\b',  # DD-MM-YY or YY-MM-DD
-        # r'\b(\d{4}년 \d{1,2}월 \d{1,2}일)\b',  # YYYY년 MM월 DD일
-        # r'\b(\d{8})\b',  # YYYYMMDD
         r'\b(\d{4}-\d{2}-\d{2})\s*[-~]?\s*(\d{4}-\d{2}-\d{2})\b',  # YYYY-MM-DD - YYYY-MM-DD
         r'\b(\d{8})\s*[-~]?\s*(\d{8})\b',  # YYYYMMDD - YYYYMMDD
         r'\b(\d{4}년 \d{1,2}월 \d{1,2}일)\s*[-~]?\s*(\d{4}년 \d{1,2}월 \d{1,2}일)\b'  # YYYY년 MM월 DD일 - YYYY년 MM월 DD일
@@ -150,7 +142,6 @@ def extract_dates_and_events(text):
 
                     if start_date:
                         event_name = ""
-                        
                         
                         # 이전 줄에서 이벤트 이름 찾기
                         if i > 0:
@@ -202,7 +193,6 @@ def extract_operating_hours(text):
             operating_hours.append(f"{day} {start_time} - {end_time}")
     
     return operating_hours
-
 
 def analyze_sentence_for_category(sentence):
     # 날짜 및 일정 먼저 추출 시도
@@ -261,15 +251,10 @@ def summarize_text(texts, min_text_length=3):
         # `keywords`가 정의되지 않은 경우를 대비해 기본 문장 반환
         return []
 
-
-
-def generate_category_1_response( image_url, formatted_text, extracted_places, hashtags):
+def generate_category_1_response(image_url, formatted_text, extracted_places, hashtags):
     operating_hours = extract_operating_hours(formatted_text)
     summary = extract_summary(hashtags) if hashtags else ""
     filename = os.path.basename(image_url)
-    
-    # extracted_places를 문자열로 변환
-    # places_str = " ".join([str(place) for place in extracted_places])
     
     return {
         "categoryId": 1,
@@ -281,8 +266,7 @@ def generate_category_1_response( image_url, formatted_text, extracted_places, h
         "photoUrl": image_url
     }
 
-
-def generate_category_2_response( image_url, formatted_text,extracted_events):
+def generate_category_2_response(image_url, formatted_text, extracted_events):
     filename = os.path.basename(image_url)
 
     # 키워드 추출
@@ -332,44 +316,48 @@ def generate_category_3_response(image_url, formatted_text):
         "photoUrl": image_url
     }
 
+@app.post("/analyze_images")
+async def analyze_images(image_urls: ImageUrls):
+    results = []
 
-@app.post("/analyze_image")
-async def analyze_image(image_url: ImageUrl):
-    image_url = image_url.imageUrl
+    for image_url in image_urls.imageUrls:
+        if not image_url:
+            results.append({"imageUrl": image_url, "error": "이미지 URL이 제공되지 않았습니다."})
+            continue
+        
+        try:
+            img = await download_image_from_url(image_url)
+            
+            try:
+                # OCR 수행 - 시간 제한 15초
+                ocr_results = await asyncio.wait_for(perform_ocr(img), timeout=15.0)
+            except asyncio.TimeoutError:
+                results.append({"imageUrl": image_url, "error": "분석 실패: 시간이 초과되었습니다."})
+                continue
 
-    if not image_url:
-        raise HTTPException(status_code=400, detail="이미지 URL이 제공되지 않았습니다.")
-    
-    img = await download_image_from_url(image_url)
-    
-    try:
-        # OCR 수행 - 시간 제한 15초
-        ocr_results = await asyncio.wait_for(perform_ocr(img), timeout=15.0)
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=408, detail="분석 실패: 시간이 초과되었습니다.")
+            # OCR 결과 텍스트 추출 및 줄바꿈 포맷 적용
+            formatted_text = format_ocr_result(ocr_results)
 
-    # OCR 결과 텍스트 추출 및 줄바꿈 포맷 적용
-    formatted_text = format_ocr_result(ocr_results)
+            # 해시태그
+            formatted_text, hashtags = remove_summary(formatted_text)
 
-    # 해시태그
-    formatted_text, hashtags = remove_summary(formatted_text)
+            extracted_events = extract_dates_and_events(formatted_text)
+            
+            if extracted_events:
+                response_data = generate_category_2_response(image_url, formatted_text, extracted_events)
+            else:
+                extracted_places = extract_places(formatted_text)
+                if extracted_places:
+                    response_data = generate_category_1_response(image_url, formatted_text, extracted_places, hashtags)
+                else:
+                    response_data = generate_category_3_response(image_url, formatted_text)
+            
+            results.append(response_data)
+        
+        except HTTPException as e:
+            results.append({"imageUrl": image_url, "error": str(e.detail)})
 
-    extracted_events = extract_dates_and_events(formatted_text)
-    
-    if extracted_events:
-        print("Extracted events:", extracted_events)
-        response_data = generate_category_2_response( image_url, formatted_text,extracted_events)
-    else:
-        extracted_places = extract_places(formatted_text)
-        if extracted_places:
-            print("Extracted places:", extracted_places)
-            response_data = generate_category_1_response(image_url, formatted_text, extracted_places, hashtags)
-        else:
-            print("No events or places found. Categorizing as 3.")
-            response_data = generate_category_3_response(image_url,formatted_text)
-    
-    print("Response category:", response_data["categoryId"])
-    return JSONResponse(content=response_data)
+    return JSONResponse(content={"data": results})
 
 @app.get("/")
 async def index():
@@ -377,5 +365,4 @@ async def index():
 
 if __name__ == "__main__":
     import uvicorn
-    # 8080
     uvicorn.run(app, host="0.0.0.0", port=8080, log_level="debug")

@@ -3,9 +3,20 @@
 `uvicorn main:app --host 0.0.0.0 --port 8000 --reload`
 
 ```
-curl --location 'http://127.0.0.1:8000/analyze_image' \
+curl --location 'http://127.0.0.1:5000/analyze_images' \
 --header 'Content-Type: application/json' \
---data '{"imageUrl": "https://screen-s3-bucket.s3.ap-northeast-2.amazonaws.com/place3.png"}'
+--data '{"imageUrls": ["https://screen-s3-bucket.s3.ap-northeast-2.amazonaws.com/place3.png"]}'
+
+
+curl --location 'http://127.0.0.1:5000/analyze_images' \
+--header 'Content-Type: application/json' \
+--data '{
+  "imageUrls": [
+    "https://screen-s3-bucket.s3.ap-northeast-2.amazonaws.com/place2.png",
+    "https://screen-s3-bucket.s3.ap-northeast-2.amazonaws.com/place3.png"
+  ]
+}'
+
 ```
 
 ```
