@@ -79,16 +79,16 @@ def extract_summary(hashtags):
 def extract_places(text):
     PLACE_KEYWORDS_PATTERN = r'\b(?:장소|주소)\b'
     FULL_ADDRESS_PATTERN = (
-        r'\b(?:서울|부산|대구|인천|광주|대전|울산|경기|경상|전라|충청|제주도)\b' 
+        r'\b(?:서울|부산|대구|인천|광주|대전|울산|경기|경상|전라|충청|제주도|영등포구|영등포구도림로길)\b' 
         r'\s*'  
         r'(?:[^\s]{1,4})'  
         r'\s*(?:\d+)?'  
         r'\s*(?:\S*)?'  
-        r'(?:\s+(?:로|길))?'  
+        r'(?:\s+(?:로|길|층))?'  
         r'\s*'  
         r'\s*(?:\d*)'  
     )
-    PROVINCE_PATTERN = r'\b(?:서울시|서울|부산|대구|인천|광주|대전|울산|경기|경상|전라|충청|제주도)\b'
+    PROVINCE_PATTERN = r'\b(?:서울시|서울|부산|대구|인천|광주|대전|울산|경기|경상|전라|충청|제주도|영등포구도림로길 )\b'
 
     if re.search(PLACE_KEYWORDS_PATTERN, text):
         text = re.sub(PLACE_KEYWORDS_PATTERN, '', text).strip()
@@ -235,12 +235,33 @@ def extract_keywords(texts, min_count=1, max_length=20, beta=0.95, max_iter=10):
     
     return keywords if keywords is not None else {}
 
-def summarize_text(text, num_keywords=5, num_keysents=10):
-    
-    # 문장 요약
-    keywords, key_sentences = summarize_with_sentences(text, num_keywords=num_keywords, num_keysents=num_keysents)
-    
-    return key_sentences
+def summarize_text(texts, min_text_length=3):
+    if len(texts) < min_text_length:
+        return []  # Return empty list if there are not enough sentences for summarization
+
+    try:
+        # krwordrank를 사용하여 요약을 시도합니다.
+        keywords, key_sentences = summarize_with_sentences(texts, num_keywords=10, num_keysents=5)
+        
+        # keywords가 정의되어 있는지 확인 후 사용
+        if not keywords:
+            raise ValueError("No keywords found.")
+        
+        # keywords가 있을 때만 필터링 수행
+        keyword_sentences = [sentence for sentence in texts if any(keyword in sentence for keyword in keywords)]
+        
+        # 필터링된 문장이 없으면 기본 요약 문장 반환
+        if not keyword_sentences:
+            return key_sentences
+
+        return keyword_sentences
+
+    except ValueError as e:
+        print(f"Summarization failed: {e}")
+        # `keywords`가 정의되지 않은 경우를 대비해 기본 문장 반환
+        return []
+
+
 
 def generate_category_1_response( image_url, formatted_text, extracted_places, hashtags):
     operating_hours = extract_operating_hours(formatted_text)
@@ -280,24 +301,33 @@ def generate_category_2_response( image_url, formatted_text,extracted_events):
         "photoUrl": image_url
     }
 
-def generate_category_3_response( image_url, formatted_text):
+def generate_category_3_response(image_url, formatted_text):
     filename = os.path.basename(image_url)
 
     # 키워드 추출
     clean_text = remove_numbers(formatted_text)
     texts = clean_text.split('\n')
 
+    # Extract keywords
     keywords = extract_keywords(texts)
     top_keywords = [word for word, r in sorted(keywords.items(), key=lambda x: x[1], reverse=True)[:3]]
     keywords_summary = ' '.join(top_keywords)
 
+    # Summarize text
     summarized_sentences = summarize_text(texts)
-        
+
+    # If summary is too short or fails, return sentences containing top keywords
+    if not summarized_sentences:
+        summarized_sentences = [sentence for sentence in texts if any(keyword in sentence for keyword in top_keywords)]
+
+    # If there are still no sentences, return the original texts
+    if not summarized_sentences:
+        summarized_sentences = texts
 
     return {
         "categoryId": 3,
         "title": keywords_summary,
-        "summary":summarized_sentences,
+        "summary": summarized_sentences,
         "photoName": filename,
         "photoUrl": image_url
     }
@@ -348,4 +378,4 @@ async def index():
 if __name__ == "__main__":
     import uvicorn
     # 8080
-    uvicorn.run(app, host="0.0.0.0", port=8080, log_level="debug")
+    uvicorn.run(app, host="0.0.0.0", port=5000, log_level="debug")
