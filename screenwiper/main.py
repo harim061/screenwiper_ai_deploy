@@ -308,10 +308,12 @@ def generate_category_3_response(image_url, formatted_text):
     if not summarized_sentences:
         summarized_sentences = texts
 
+    summary_string = '\n'.join(summarized_sentences)
+
     return {
         "categoryId": 3,
         "title": keywords_summary,
-        "summary": summarized_sentences,
+        "summary": summary_string,
         "photoName": filename,
         "photoUrl": image_url
     }
